@@ -44,6 +44,7 @@ func main() {
         log.Fatal(err)
     }
 
+    var current_forwarder forwarder.Forwarder
     for {
         chat, err := talk.Recv()
         if err != nil {
@@ -65,10 +66,17 @@ func main() {
                     RemotePort: remotePort,
                     LocalPort:  localPort,
                 }
-                err := ssh_config.RunForwarder()
-                if err == nil {
-                    talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: "tunel_created"})
+                current_forwarder, err = ssh_config.RunForwarder()
+                if err != nil {
+                    log.Fatalf("Forwarder error: %v", err)
                 }
+                talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: "tunel_created"})
+            } else if strings.HasPrefix(v.Text, "stop_connect_back") {
+                err := current_forwarder.Stop()
+                if err != nil {
+                    log.Fatalf("Forwarder stop error: %v", err)
+                }
+                talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: "tunel_closed"})
             } else {
                 fmt.Println(v.Remote, v.Text)
             }
