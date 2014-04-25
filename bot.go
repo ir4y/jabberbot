@@ -44,7 +44,9 @@ func main() {
         log.Fatal(err)
     }
 
-    var current_forwarder forwarder.Forwarder
+    var current_forwarder *forwarder.Forwarder
+    current_forwarder = nil
+
     for {
         chat, err := talk.Recv()
         if err != nil {
@@ -59,24 +61,34 @@ func main() {
             if strings.HasPrefix(v.Text, "echo ") {
                 talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: v.Text[5:]})
             } else if scanf_err == nil && c == 2 {
-                ssh_config := forwarder.SSHConfig{
-                    Username:   *ssh_username,
-                    Password:   *ssh_password,
-                    SSHServer:  *ssh_server,
-                    RemotePort: remotePort,
-                    LocalPort:  localPort,
+                if current_forwarder != nil {
+                    talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: "Already in forwarding state"})
+                } else {
+                    ssh_config := forwarder.SSHConfig{
+                        Username:   *ssh_username,
+                        Password:   *ssh_password,
+                        SSHServer:  *ssh_server,
+                        RemotePort: remotePort,
+                        LocalPort:  localPort,
+                        Debug:      *debug,
+                    }
+                    current_forwarder, err = ssh_config.RunForwarder()
+                    if err != nil {
+                        log.Fatalf("Forwarder error: %v", err)
+                    }
+                    talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: "tunel_created"})
                 }
-                current_forwarder, err = ssh_config.RunForwarder()
-                if err != nil {
-                    log.Fatalf("Forwarder error: %v", err)
-                }
-                talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: "tunel_created"})
             } else if strings.HasPrefix(v.Text, "stop_connect_back") {
-                err := current_forwarder.Stop()
-                if err != nil {
-                    log.Fatalf("Forwarder stop error: %v", err)
+                if current_forwarder == nil {
+                    talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: "No tunnel exists"})
+                } else {
+                    err := current_forwarder.Close()
+                    current_forwarder = nil
+                    if err != nil {
+                        log.Fatalf("Forwarder stop error: %v", err)
+                    }
+                    talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: "tunel_closed"})
                 }
-                talk.Send(xmpp.Chat{Remote: v.Remote, Type: "chat", Text: "tunel_closed"})
             } else {
                 fmt.Println(v.Remote, v.Text)
             }
